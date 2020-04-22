@@ -160,7 +160,7 @@ public final class LedgerWriterController {
      *
      * @throws IllegalArgumentException  on validation error
      */
-    private void validateTransaction(String authedAcct, Transaction transaction)
+    protected void validateTransaction(String authedAcct, Transaction transaction)
             throws IllegalArgumentException {
         final String fromAcct = transaction.getFromAccountNum();
         final String fromRoute = transaction.getFromRoutingNum();

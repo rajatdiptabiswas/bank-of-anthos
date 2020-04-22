@@ -17,23 +17,44 @@
 package anthos.samples.financedemo.ledgerwriter;
 
 import com.auth0.jwt.JWTVerifier;
+import com.auth0.jwt.interfaces.Claim;
+import com.auth0.jwt.interfaces.DecodedJWT;
 import org.junit.Rule;
 import org.junit.contrib.java.lang.system.EnvironmentVariables;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
+import org.mockito.junit.MockitoJUnit;
+import org.mockito.junit.MockitoJUnitRunner;
+import org.mockito.junit.MockitoRule;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.quality.Strictness;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.*;
 
+@ExtendWith(MockitoExtension.class)
 class LedgerWriterControllerTest {
 
     private LedgerWriterController ledgerWriterController;
 
     @Mock
     private JWTVerifier verifier;
+    @Mock
+    private Transaction transaction;
+    @Mock
+    private DecodedJWT jwt;
+    @Mock
+    private Claim claim;
 
     @Rule
     private EnvironmentVariables environmentVariables;
@@ -81,5 +102,24 @@ class LedgerWriterControllerTest {
     @Test
     void addTransaction() {
         // TODO: [issue-52] add tests to addTransaction
+        // test verification success
+
+        // Given
+        LedgerWriterController spyLedgerWriterController = spy(ledgerWriterController);
+
+        // When
+        when(verifier.verify(anyString())).thenReturn(jwt);
+        when(jwt.getClaim("acct")).thenReturn(claim);
+
+//        doNothing().when(spyLedgerWriterController).validateTransaction(claim.asString(), transaction);
+//        doNothing().when(spyLedgerWriterController).validateTransaction(anyString(), Mockito.nullable(Transaction.class));
+//        doNothing().when(spyLedgerWriterController).validateTransaction(eq("ab"), any(Transaction.class));
+        doNothing().when(spyLedgerWriterController).validateTransaction(anyString(), any(Transaction.class));
+        final ResponseEntity actualResult = spyLedgerWriterController.addTransaction("Bearer abc", transaction);
+
+        verify(spyLedgerWriterController).validateTransaction(any(), any());
+
+        // Then
+
     }
 }
