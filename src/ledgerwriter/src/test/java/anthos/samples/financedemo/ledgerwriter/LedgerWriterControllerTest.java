@@ -27,26 +27,24 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.Mockito;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoJUnitRunner;
-import org.mockito.junit.MockitoRule;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.quality.Strictness;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.when;
+import static org.mockito.MockitoAnnotations.initMocks;
 
-@ExtendWith(MockitoExtension.class)
+//@ExtendWith(MockitoExtension.class)
 class LedgerWriterControllerTest {
 
     private LedgerWriterController ledgerWriterController;
-
+    @Mock
+    private TransactionValidator transactionValidator;
+    @Mock
+    private TransactionRepository transactionRepository;
     @Mock
     private JWTVerifier verifier;
     @Mock
@@ -55,6 +53,7 @@ class LedgerWriterControllerTest {
     private DecodedJWT jwt;
     @Mock
     private Claim claim;
+
 
     @Rule
     private EnvironmentVariables environmentVariables;
@@ -65,8 +64,10 @@ class LedgerWriterControllerTest {
 
     @BeforeEach
     void setUp() {
+        initMocks(this);
         environmentVariables = new EnvironmentVariables();
-        ledgerWriterController = new LedgerWriterController(verifier,
+        ledgerWriterController = new LedgerWriterController(
+                transactionRepository, verifier, transactionValidator,
                 LOCAL_ROUTING_NUM, BALANCES_API_ADDR, VERSION);
     }
 
@@ -105,21 +106,13 @@ class LedgerWriterControllerTest {
         // test verification success
 
         // Given
-        LedgerWriterController spyLedgerWriterController = spy(ledgerWriterController);
-
-        // When
         when(verifier.verify(anyString())).thenReturn(jwt);
         when(jwt.getClaim("acct")).thenReturn(claim);
+        when(transaction.getFromRoutingNum()).thenReturn("SOME STRING");
 
-//        doNothing().when(spyLedgerWriterController).validateTransaction(claim.asString(), transaction);
-//        doNothing().when(spyLedgerWriterController).validateTransaction(anyString(), Mockito.nullable(Transaction.class));
-//        doNothing().when(spyLedgerWriterController).validateTransaction(eq("ab"), any(Transaction.class));
-        doNothing().when(spyLedgerWriterController).validateTransaction(anyString(), any(Transaction.class));
-        final ResponseEntity actualResult = spyLedgerWriterController.addTransaction("Bearer abc", transaction);
-
-        verify(spyLedgerWriterController).validateTransaction(any(), any());
+        // When
+        final ResponseEntity actualResult = ledgerWriterController.addTransaction("Bearer abc", transaction);
 
         // Then
-
     }
 }

@@ -16,31 +16,19 @@
 
 package anthos.samples.financedemo.ledgerwriter;
 
-import java.util.logging.Logger;
-import java.util.regex.Pattern;
-
-import  org.springframework.web.client.HttpServerErrorException;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.CannotCreateTransactionException;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.ResourceAccessException;
-import org.springframework.web.client.RestTemplate;
-
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.*;
+import org.springframework.transaction.CannotCreateTransactionException;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.client.HttpServerErrorException;
+import org.springframework.web.client.ResourceAccessException;
+import org.springframework.web.client.RestTemplate;
+
+import java.util.logging.Logger;
+import java.util.regex.Pattern;
 
 @RestController
 public final class LedgerWriterController {
@@ -48,7 +36,6 @@ public final class LedgerWriterController {
     private static final Logger LOGGER =
             Logger.getLogger(LedgerWriterController.class.getName());
 
-    @Autowired
     private TransactionRepository transactionRepository;
 
     private JWTVerifier verifier;
@@ -56,26 +43,32 @@ public final class LedgerWriterController {
     private String localRoutingNum;
     private String balancesApiUri;
     private String version;
+    private TransactionValidator transactionValidator;
+
 
 
     public static final String READINESS_CODE = "ok";
     // account ids should be 10 digits between 0 and 9
-    private static final Pattern ACCT_REGEX = Pattern.compile("^[0-9]{10}$");
+    public static final Pattern ACCT_REGEX = Pattern.compile("^[0-9]{10}$");
     // route numbers should be 9 digits between 0 and 9
-    private static final Pattern ROUTE_REGEX = Pattern.compile("^[0-9]{9}$");
+    public static final Pattern ROUTE_REGEX = Pattern.compile("^[0-9]{9}$");
 
     /**
-    * Constructor.
-    *
-    * Initializes JWT verifier.
-    */
+     * Constructor.
+     *
+     * Initializes JWT verifier.
+     */
 
     public LedgerWriterController(
+            TransactionRepository transactionRepository,
             JWTVerifier verifier,
+            TransactionValidator transactionValidator,
             @Value("${LOCAL_ROUTING_NUM}") String localRoutingNum,
             @Value("http://${BALANCES_API_ADDR}/balances")
                     String balancesApiUri,
             @Value("${VERSION}") String version) {
+        this.transactionRepository = transactionRepository;
+        this.transactionValidator = transactionValidator;
         this.verifier = verifier;
         this.localRoutingNum = localRoutingNum;
         this.balancesApiUri = balancesApiUri;
@@ -122,7 +115,7 @@ public final class LedgerWriterController {
         try {
             final DecodedJWT jwt = this.verifier.verify(bearerToken);
             // validate transaction
-            validateTransaction(jwt.getClaim("acct").asString(), transaction);
+            transactionValidator.validateTransaction(localRoutingNum, jwt.getClaim("acct").asString(), transaction);
 
             if (transaction.getFromRoutingNum().equals(localRoutingNum)) {
                 checkAvailableBalance(bearerToken, transaction);
@@ -134,60 +127,15 @@ public final class LedgerWriterController {
 
         } catch (JWTVerificationException e) {
             return new ResponseEntity<String>("not authorized",
-                                              HttpStatus.UNAUTHORIZED);
+                    HttpStatus.UNAUTHORIZED);
         } catch (IllegalArgumentException | IllegalStateException e) {
             return new ResponseEntity<String>(e.toString(),
-                                              HttpStatus.BAD_REQUEST);
+                    HttpStatus.BAD_REQUEST);
         } catch (ResourceAccessException
                 | CannotCreateTransactionException
                 | HttpServerErrorException e) {
             return new ResponseEntity<String>(e.toString(),
-                                              HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    /**
-     * Authenticate transaction details before adding to the ledger.
-     *
-     *   - Ensure sender is the same user authenticated by auth token
-     *   - Ensure account and routing numbers are in the correct format
-     *   - Ensure sender and receiver are different accounts
-     *   - Ensure amount is positive, and sender has proper balance
-     *
-     * @param authedAccount  the currently authenticated user account
-     * @param transaction    the transaction object
-     * @param bearerToken    the token used to authenticate request
-     *
-     * @throws IllegalArgumentException  on validation error
-     */
-    protected void validateTransaction(String authedAcct, Transaction transaction)
-            throws IllegalArgumentException {
-        final String fromAcct = transaction.getFromAccountNum();
-        final String fromRoute = transaction.getFromRoutingNum();
-        final String toAcct = transaction.getToAccountNum();
-        final String toRoute = transaction.getToRoutingNum();
-        final Integer amount = transaction.getAmount();
-
-        // If this is an internal transaction,
-        // ensure it originated from the authenticated user.
-        if (fromRoute.equals(localRoutingNum) && !fromAcct.equals(authedAcct)) {
-            throw new IllegalArgumentException("sender not authenticated");
-        }
-        // Validate account and routing numbers.
-        if (!ACCT_REGEX.matcher(fromAcct).matches()
-              || !ACCT_REGEX.matcher(toAcct).matches()
-              || !ROUTE_REGEX.matcher(fromRoute).matches()
-              || !ROUTE_REGEX.matcher(toRoute).matches()) {
-            throw new IllegalArgumentException("invalid account details");
-
-        }
-        // Ensure sender isn't receiver.
-        if (fromAcct.equals(toAcct) && fromRoute.equals(toRoute)) {
-            throw new IllegalArgumentException("can't send to self");
-        }
-        // Ensure amount is valid value.
-        if (amount <= 0) {
-            throw new IllegalArgumentException("invalid amount");
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -212,7 +160,7 @@ public final class LedgerWriterController {
         RestTemplate restTemplate = new RestTemplate();
         String uri = balancesApiUri + "/" + fromAcct;
         ResponseEntity<Integer> response = restTemplate.exchange(
-            uri, HttpMethod.GET, entity, Integer.class);
+                uri, HttpMethod.GET, entity, Integer.class);
         Integer senderBalance = response.getBody();
         if (senderBalance < amount) {
             throw new IllegalStateException("insufficient balance");
