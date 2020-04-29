@@ -45,8 +45,6 @@ public final class LedgerWriterController {
     private String version;
     private TransactionValidator transactionValidator;
 
-
-
     public static final String READINESS_CODE = "ok";
     // account ids should be 10 digits between 0 and 9
     public static final Pattern ACCT_REGEX = Pattern.compile("^[0-9]{10}$");
@@ -122,8 +120,9 @@ public final class LedgerWriterController {
             }
 
             // No exceptions thrown. Add to ledger.
-            submitTransaction(transaction);
-            return new ResponseEntity<String>("ok", HttpStatus.CREATED);
+            LOGGER.fine("Submitting transaction " + transaction.toString());
+            transactionRepository.save(transaction);
+            return new ResponseEntity<String>(READINESS_CODE, HttpStatus.CREATED);
 
         } catch (JWTVerificationException e) {
             return new ResponseEntity<String>("not authorized",
@@ -148,7 +147,7 @@ public final class LedgerWriterController {
      * @throws IllegalStateException     if insufficient funds
      * @throws HttpServerErrorException  if balance service returns 500
      */
-    private void checkAvailableBalance(String token, Transaction transaction)
+    protected void checkAvailableBalance(String token, Transaction transaction)
             throws IllegalStateException, HttpServerErrorException {
         final String fromAcct = transaction.getFromAccountNum();
         final Integer amount = transaction.getAmount();
@@ -165,10 +164,5 @@ public final class LedgerWriterController {
         if (senderBalance < amount) {
             throw new IllegalStateException("insufficient balance");
         }
-    }
-
-    private void submitTransaction(Transaction transaction) {
-        LOGGER.fine("Submitting transaction " + transaction.toString());
-        transactionRepository.save(transaction);
     }
 }

@@ -19,25 +19,19 @@ package anthos.samples.financedemo.ledgerwriter;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.interfaces.Claim;
 import com.auth0.jwt.interfaces.DecodedJWT;
-import org.junit.Rule;
-import org.junit.contrib.java.lang.system.EnvironmentVariables;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.mockito.MockitoAnnotations.initMocks;
 
-//@ExtendWith(MockitoExtension.class)
 class LedgerWriterControllerTest {
 
     private LedgerWriterController ledgerWriterController;
@@ -54,10 +48,6 @@ class LedgerWriterControllerTest {
     @Mock
     private Claim claim;
 
-
-    @Rule
-    private EnvironmentVariables environmentVariables;
-
     private static final String VERSION = "v0.1.0";
     private static final String LOCAL_ROUTING_NUM = "123456789";
     private static final String BALANCES_API_ADDR = "balancereader:8080";
@@ -65,7 +55,6 @@ class LedgerWriterControllerTest {
     @BeforeEach
     void setUp() {
         initMocks(this);
-        environmentVariables = new EnvironmentVariables();
         ledgerWriterController = new LedgerWriterController(
                 transactionRepository, verifier, transactionValidator,
                 LOCAL_ROUTING_NUM, BALANCES_API_ADDR, VERSION);
@@ -76,7 +65,6 @@ class LedgerWriterControllerTest {
             "return a ResponseEntity with the version number")
     void version() {
         // Given
-        environmentVariables.set("VERSION", VERSION);
 
         // When
         final ResponseEntity actualResult = ledgerWriterController.version();
@@ -101,18 +89,55 @@ class LedgerWriterControllerTest {
     }
 
     @Test
-    void addTransaction() {
+    @DisplayName("Given the transaction routing number is different than the" +
+            "local routing number, return HTTP Status 201")
+    void addTransactionSuccessWhenDiffThanLocalRoutingNum() {
         // TODO: [issue-52] add tests to addTransaction
-        // test verification success
 
         // Given
         when(verifier.verify(anyString())).thenReturn(jwt);
         when(jwt.getClaim("acct")).thenReturn(claim);
+        // Skip method call checkAvailableBalance
         when(transaction.getFromRoutingNum()).thenReturn("SOME STRING");
 
         // When
-        final ResponseEntity actualResult = ledgerWriterController.addTransaction("Bearer abc", transaction);
+        final ResponseEntity actualResult =
+                ledgerWriterController.addTransaction(
+                        "Bearer abc", transaction);
 
         // Then
+        assertNotNull(actualResult);
+        assertEquals(ledgerWriterController.READINESS_CODE,
+                actualResult.getBody());
+        assertEquals(HttpStatus.CREATED, actualResult.getStatusCode());
     }
+
+    @Test
+    @DisplayName("Given the transaction routing number is the same as the" +
+            "local routing number, return HTTP Status 201")
+    void addTransactionSuccessWhenSameLocalRoutingNum() {
+        // Given
+        LedgerWriterController spyLedgerWriterController =
+                spy(ledgerWriterController);
+
+        when(verifier.verify(anyString())).thenReturn(jwt);
+        when(jwt.getClaim("acct")).thenReturn(claim);
+        // Method call checkAvailableBalance
+        when(transaction.getFromRoutingNum()).thenReturn(LOCAL_ROUTING_NUM);
+        doNothing().when(spyLedgerWriterController).checkAvailableBalance(
+                "abc", transaction);
+
+        // When
+        final ResponseEntity actualResult =
+                spyLedgerWriterController.addTransaction(
+                        "Bearer abc", transaction);
+
+        // Then
+        assertNotNull(actualResult);
+        assertEquals(ledgerWriterController.READINESS_CODE,
+                actualResult.getBody());
+        assertEquals(HttpStatus.CREATED, actualResult.getStatusCode());
+    }
+
+
 }

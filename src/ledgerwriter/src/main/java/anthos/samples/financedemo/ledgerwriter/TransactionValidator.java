@@ -21,7 +21,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class TransactionValidator {
 
-    public boolean validateTransaction(String localRoutingNum, String authedAcct, Transaction transaction)
+    public boolean validateTransaction(String localRoutingNum,
+                                       String authedAcct,
+                                       Transaction transaction)
             throws IllegalArgumentException {
         final String fromAcct = transaction.getFromAccountNum();
         final String fromRoute = transaction.getFromRoutingNum();
@@ -52,6 +54,4 @@ public class TransactionValidator {
         }
         return true;
     }
-
-
 }
